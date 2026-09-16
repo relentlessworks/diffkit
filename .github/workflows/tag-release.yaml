@@ -1,0 +1,77 @@
+name: Tag & Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tag-and-release:
+    name: Tag, Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tag
+        if: steps.check_tag.outputs.exists != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Cross-compile
+        if: steps.check_tag.outputs.exists != 'true'
+        strategy:
+          matrix:
+            target:
+              - linux/amd64
+              - linux/arm64
+              - darwin/amd64
+              - darwin/arm64
+              - windows/amd64
+        env:
+          GOOS: ${{ matrix.target == 'linux/amd64' && 'linux' || matrix.target == 'linux/arm64' && 'linux' || matrix.target == 'darwin/amd64' && 'darwin' || matrix.target == 'darwin/arm64' && 'darwin' || 'windows' }}
+          GOARCH: ${{ matrix.target == 'linux/amd64' && 'amd64' || matrix.target == 'linux/arm64' && 'arm64' || matrix.target == 'darwin/amd64' && 'amd64' || matrix.target == 'darwin/arm64' && 'arm64' || 'amd64' }}
+          CGO_ENABLED: 0
+        run: |
+          go build -trimpath -ldflags "-s -w" -o diffkit-${{ matrix.target }} ./cmd/diffkit
+          tar czf diffkit-${{ matrix.target }}.tar.gz diffkit-${{ matrix.target }}
+
+      - name: Generate checksums
+        if: steps.check_tag.outputs.exists != 'true'
+        run: |
+          sha256sum diffkit-*.tar.gz > checksums-sha256.txt
+
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: diffkit v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            diffkit-*.tar.gz
+            checksums-sha256.txt

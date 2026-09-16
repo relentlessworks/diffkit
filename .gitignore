@@ -1,0 +1,11 @@
+# Binaries
+diffkit
+*.exe
+
+# Test artifacts
+*.out
+coverage.txt
+
+# IDE
+.idea/
+.vscode/
