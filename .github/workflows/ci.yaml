@@ -31,18 +31,23 @@ jobs:
         run: CGO_ENABLED=0 go build -trimpath ./cmd/diffkit
 
   cross-compile:
-    name: Cross-Compile
+    name: Cross-Compile (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     needs: check
     strategy:
       matrix:
-        target:
-          - linux/amd64
-          - linux/arm64
-          - darwin/amd64
-          - darwin/arm64
-          - windows/amd64
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
     steps:
       - uses: actions/checkout@v4
 
@@ -52,14 +57,14 @@ jobs:
 
       - name: Build
         env:
-          GOOS: ${{ matrix.target == 'linux/amd64' && 'linux' || matrix.target == 'linux/arm64' && 'linux' || matrix.target == 'darwin/amd64' && 'darwin' || matrix.target == 'darwin/arm64' && 'darwin' || 'windows' }}
-          GOARCH: ${{ matrix.target == 'linux/amd64' && 'amd64' || matrix.target == 'linux/arm64' && 'arm64' || matrix.target == 'darwin/amd64' && 'amd64' || matrix.target == 'darwin/arm64' && 'arm64' || 'amd64' }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -trimpath -ldflags "-s -w" -o diffkit-${{ matrix.target }} ./cmd/diffkit
-          tar czf diffkit-${{ matrix.target }}.tar.gz diffkit-${{ matrix.target }}
+          go build -trimpath -ldflags "-s -w" -o diffkit-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/diffkit
+          tar czf diffkit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz diffkit-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: diffkit-${{ matrix.target }}
-          path: diffkit-${{ matrix.target }}.tar.gz
+          name: diffkit-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: diffkit-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
